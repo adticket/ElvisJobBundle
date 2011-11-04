@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+
+<container xmlns="http://symfony.com/schema/dic/services"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
+
+    <parameters>
+        <parameter key="adticket_elvis_job.server.class">Adticket\Elvis\JobBundle\Server</parameter>
+        <parameter key="adticket_elvis_job.job.add.class">Adticket\Elvis\JobBundle\Job\AddJob</parameter>
+    </parameters>
+
+    <services>
+        <service id="adticket_elvis_job.server" class="%adticket_elvis_job.server.class%">
+            <argument type="service" id="service_container" />
+        </service>
+        <service id="adticket_elvis_job.job.add" class="%adticket_elvis_job.job.add.class%" public="false" />
+    </services>
+
+</container>
