@@ -40,7 +40,7 @@
 //  | If not, see <http://www.gnu.org/licenses/>.      |
 //  +--------------------------------------------------+
 
-namespace Adticket\Elvis\JobBundle\DependencyInjection;
+namespace Adticket\Sf2BundleOS\Elvis\JobBundle\DependencyInjection;
 
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\Config\FileLocator;

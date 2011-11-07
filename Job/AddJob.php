@@ -40,7 +40,7 @@
 //  | If not, see <http://www.gnu.org/licenses/>.      |
 //  +--------------------------------------------------+
 
-namespace Adticket\Elvis\JobBundle\Job;
+namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Job;
 
 class AddJob
 {

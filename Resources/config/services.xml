@@ -5,8 +5,8 @@
     xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
 
     <parameters>
-        <parameter key="adticket_elvis_job.server.class">Adticket\Elvis\JobBundle\Server</parameter>
-        <parameter key="adticket_elvis_job.job.add.class">Adticket\Elvis\JobBundle\Job\AddJob</parameter>
+        <parameter key="adticket_elvis_job.server.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Server</parameter>
+        <parameter key="adticket_elvis_job.job.add.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Job\AddJob</parameter>
     </parameters>
 
     <services>

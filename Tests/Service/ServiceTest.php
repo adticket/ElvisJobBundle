@@ -40,7 +40,7 @@
 //  | If not, see <http://www.gnu.org/licenses/>.      |
 //  +--------------------------------------------------+
 
-namespace Adticket\Elvis\JobBundle\Tests\Controller;
+namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Tests\Controller;
 
 use Adticket\Elvis\JobBundle\Job;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;

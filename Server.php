@@ -46,7 +46,7 @@
  * @category Misc
  */
 
-namespace Adticket\Elvis\JobBundle;
+namespace Adticket\Sf2BundleOS\Elvis\JobBundle;
 
 use \Symfony\Component\DependencyInjection;
 
