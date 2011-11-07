@@ -40,14 +40,21 @@
 //  | If not, see <http://www.gnu.org/licenses/>.      |
 //  +--------------------------------------------------+
 
+/**
+ * @author Markus Tacker <m@coderbyheart.de>
+ * @package AdTicket:Sf2BundleOS:Elvis:JobBundle
+ * @category Job
+ */
+
 namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Job;
 
-interface Job {
-    function run($action, array $options = null);
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Annotation\JobOption;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
-    /**
-     * @abstract
-     * @return string
-     */
-    function getServiceId();
+/**
+ * Interface for jobs
+ */
+interface JobInterface
+{
+    function execute(ContainerInterface $container, \GearmanJob $job);
 }

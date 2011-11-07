@@ -42,28 +42,81 @@
 
 namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Tests\Controller;
 
-use Adticket\Elvis\JobBundle\Job;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Command\ServiceRunnerCommand;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\Console;
 
 /**
  * @todo FIXME Actually, run this test. See http://kriswallsmith.net/post/1338263070/how-to-test-a-symfony2-bundle
  */
 class ServiceTest extends WebTestCase
 {
-    private $client;
+    private $container;
+
+    /**
+     * @var \GearmanJob 
+     */
+    private $addResult;
+
+    protected function setUp()
+    {
+        static::$kernel = static::createKernel();
+        static::$kernel->boot();
+        $this->container = static::$kernel->getContainer();
+    }
 
     public function testAdd()
     {
-        $this->client = static::createClient();
-        $server = $this->getServer();
-        $server->addJob('adticket_elvis_job.job.add', array('a' => 1, 'b' => 2));
+        $settings = $this->container->getParameter('adticket_elvis_job.server');
+        $settings['port'] = 13666;
+        $settings['hostname'] = 'localhost';
+        $this->container->setParameter('adticket_elvis_job.server', $settings);
+
+        $client = $this->getClient();
+        $client->setPort($testport);
+        $client->addJob('adticket_elvis_job.job.add', array('a' => 1, 'b' => 2));
+
+        $pid = pcntl_fork();
+        if ($pid) {
+            sleep(1);
+            echo "Beende Worker" . PHP_EOL;
+            posix_kill($pid, 9);
+
+            // Hole Ergebnis
+            $gworker = new \GearmanWorker();
+            $gworker->addServer($settings['hostname'], $settings['port']);
+            $gworker->addFunction(ServiceRunnerCommand::NAME, array($this, 'addResult'));
+            $gworker->work();
+            print_r($this->addResult->workload());
+
+        } else {
+            $worker = new ServiceRunnerCommand();
+            $worker->setPort($testport);
+            $worker->setContainer($this->container);
+            $worker->run(new Console\Input\ArgvInput(array()), new Console\Output\ConsoleOutput());
+        }
+    }
+
+    public function addResult(\GearmanJob $job)
+    {
+        $this->addResult = $job;
     }
 
     /**
-     * @return \Adticket\Elvis\JobBundle\Server
+     * @return \Adticket\Sf2BundleOS\Elvis\JobBundle\Client
      */
-    public function getServer()
+    public function getClient()
     {
-        return $this->client->get('adticket_elvis_job.server');
+        return $this->container->get('adticket_elvis_job.client');
+    }
+
+    /**
+     * Shuts the kernel down if it was used in the test.
+     */
+    protected function tearDown()
+    {
+        if (null !== static::$kernel) {
+            static::$kernel->shutdown();
+        }
     }
 }

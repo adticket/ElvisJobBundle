@@ -42,23 +42,28 @@
 
 namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Job;
 
-class AddJob
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Annotation\JobOption;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+
+class AddJob implements JobInterface
 {
     /**
      * @var int
-     * @Adticket\Elvis\JobBundle\JobOption
+     * @JobOption
      */
-    private $a;
+    public $a;
 
     /**
      * @var int
-     * @Adticket\Elvis\JobBundle\JobOption
+     * @JobOption
      */
-    private $b;
+    public $b;
 
-    public function __construct($a, $b)
+    function execute(ContainerInterface $container, \GearmanJob $job)
     {
-        $this->a = (int)$a;
-        $this->b = (int)$b;
+        $job->sendComplete($this->a + $this->b);
+        // Push another job
+        $client = $container->get('adticket_elvis_job.client');
+        $client->add('adticket_elvis_job.job.addresult', array('sum' => $this->a + $this->b));
     }
 }

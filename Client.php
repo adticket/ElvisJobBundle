@@ -40,30 +40,46 @@
 //  | If not, see <http://www.gnu.org/licenses/>.      |
 //  +--------------------------------------------------+
 
-namespace Adticket\Sf2BundleOS\Elvis\JobBundle\DependencyInjection;
+/**
+ * @author Markus Tacker <m@coderbyheart.de>
+ * @package AdTicket:Sf2BundleOS:Elvis:JobBundle
+ */
 
-use Symfony\Component\DependencyInjection\ContainerBuilder;
-use Symfony\Component\Config\FileLocator;
-use Symfony\Component\HttpKernel\DependencyInjection\Extension;
-use Symfony\Component\DependencyInjection\Loader;
+namespace Adticket\Sf2BundleOS\Elvis\JobBundle;
+
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Annotation;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Exception;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Command;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\DependencyInjection\ContainerAware;
 
 /**
- * This is the class that loads and manages your bundle configuration
- *
- * To learn more see {@link http://symfony.com/doc/current/cookbook/bundles/extension.html}
+ * Adds jobs to the queue
  */
-class AdticketElvisJobExtension extends Extension
+class Client extends ContainerAware
 {
-    /**
-     * {@inheritDoc}
-     */
-    public function load(array $configs, ContainerBuilder $container)
+    public function __construct(ContainerInterface $container = null)
     {
-        $configuration = new Configuration();
-        $config = $this->processConfiguration($configuration, $configs);
-        $container->setParameter('adticket_elvis_job.server', $config);
+        $this->setContainer($container);
+    }
 
-        $loader = new Loader\XmlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
-        $loader->load('services.xml');
+    public function addJob($serviceId, array $options = null)
+    {
+        $this->container->get('adticket_elvis_job.optionschecker')->checkJobOptions($serviceId, $options);
+        $gclient = new \GearmanClient();
+        $gclient->addServer($this->getHostname(), $this->getPort());
+        $gclient->doBackground(Command\ServiceRunnerCommand::NAME, serialize(array('service' => $serviceId, 'options' => $options)));
+    }
+
+    public function getHostname()
+    {
+        $config = $this->getContainer()->getParameter('adticket_elvis_job.server');
+        return $config['hostname'];
+    }
+
+    public function getPort()
+    {
+        $config = $this->getContainer()->getParameter('adticket_elvis_job.server');
+        return $config['port'];
     }
 }

@@ -5,15 +5,21 @@
     xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
 
     <parameters>
-        <parameter key="adticket_elvis_job.server.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Server</parameter>
+        <parameter key="adticket_elvis_job.client.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Client</parameter>
         <parameter key="adticket_elvis_job.job.add.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Job\AddJob</parameter>
+        <parameter key="adticket_elvis_job.job.addresult.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Job\AddJobResult</parameter>
+        <parameter key="adticket_elvis_job.optionschecker.class">Adticket\Sf2BundleOS\Elvis\JobBundle\JobOptionsChecker</parameter>
     </parameters>
 
     <services>
-        <service id="adticket_elvis_job.server" class="%adticket_elvis_job.server.class%">
+        <service id="adticket_elvis_job.client" class="%adticket_elvis_job.client.class%">
             <argument type="service" id="service_container" />
         </service>
-        <service id="adticket_elvis_job.job.add" class="%adticket_elvis_job.job.add.class%" public="false" />
+        <service id="adticket_elvis_job.job.add" class="%adticket_elvis_job.job.add.class%" />
+        <service id="adticket_elvis_job.job.addresult" class="%adticket_elvis_job.job.addresult.class%" />
+        <service id="adticket_elvis_job.optionschecker" class="%adticket_elvis_job.optionschecker.class%">
+            <argument type="service" id="service_container" />
+        </service>
     </services>
 
 </container>

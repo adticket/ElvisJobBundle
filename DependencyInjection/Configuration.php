@@ -58,12 +58,13 @@ class Configuration implements ConfigurationInterface
     public function getConfigTreeBuilder()
     {
         $treeBuilder = new TreeBuilder();
-        $rootNode = $treeBuilder->root('adticket_elvis_job');
-
-        // Here you should define the parameters that are allowed to
-        // configure your bundle. See the documentation linked above for
-        // more information on that topic.
-
+        $root = $treeBuilder->root('adticket_elvis_job');
+        $root
+            ->children()
+            ->scalarNode('hostname')->defaultValue('127.0.0.1')->end()
+            ->scalarNode('port')->defaultValue(4730)->end()
+            ->scalarNode('timeout')->defaultValue(-1)->end()
+        ->end();
         return $treeBuilder;
     }
 }

@@ -40,30 +40,51 @@
 //  | If not, see <http://www.gnu.org/licenses/>.      |
 //  +--------------------------------------------------+
 
-namespace Adticket\Sf2BundleOS\Elvis\JobBundle\DependencyInjection;
+/**
+ * @author Markus Tacker <m@coderbyheart.de>
+ * @package AdTicket:Sf2BundleOS:Elvis:JobBundle
+ */
 
-use Symfony\Component\DependencyInjection\ContainerBuilder;
-use Symfony\Component\Config\FileLocator;
-use Symfony\Component\HttpKernel\DependencyInjection\Extension;
-use Symfony\Component\DependencyInjection\Loader;
+namespace Adticket\Sf2BundleOS\Elvis\JobBundle;
+
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Exception;
+use Symfony\Component\DependencyInjection\ContainerAware;
 
 /**
- * This is the class that loads and manages your bundle configuration
- *
- * To learn more see {@link http://symfony.com/doc/current/cookbook/bundles/extension.html}
+ * Checks job options
  */
-class AdticketElvisJobExtension extends Extension
+class JobOptionsChecker extends ContainerAware
 {
     /**
-     * {@inheritDoc}
+     * Überprüft die Optionen für einen Job
+     *
+     * @param string Service-ID
+     * @param array die Optionen
      */
-    public function load(array $configs, ContainerBuilder $container)
+    public function checkJobOptions($serviceId, Array $options)
     {
-        $configuration = new Configuration();
-        $config = $this->processConfiguration($configuration, $configs);
-        $container->setParameter('adticket_elvis_job.server', $config);
+        $job = $this->container->get($serviceId);
+        $jobOptions = $this->getJobOptions($job);
+        $unmatchedOptions = array_diff($jobOptions, array_keys($options));
+        if (!empty($unmatchedOptions)) throw new Exception(sprintf('Unknown options provided for job "%s": %s', $serviceId, join(', ', $unmatchedOptions)));
+    }
 
-        $loader = new Loader\XmlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
-        $loader->load('services.xml');
+    /**
+     * Liefert die mit @Annotation\JobOption markierten Properties einer Klasse
+     * 
+     * @param object $job
+     * @return string[]
+     */
+    protected function getJobOptions($job)
+    {
+        $annotationReader = $this->container->get('annotation_reader');
+        $refClass = new \ReflectionClass(is_object($job) ? get_class($job) : $job);
+        $jobOptions = array();
+        foreach($refClass->getProperties() as $property) {
+            foreach($annotationReader->getPropertyAnnotations($property) as $propertyAnnotation) {
+                if ($propertyAnnotation instanceof Annotation\JobOption) $jobOptions[] = $property->getName();
+            }
+        }
+        return $jobOptions;
     }
 }
