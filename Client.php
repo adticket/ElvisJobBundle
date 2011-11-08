@@ -80,7 +80,7 @@ class Client extends ContainerAware
     public function addJob($serviceId, array $options = null)
     {
         $this->container->get('adticket_elvis_job.optionschecker')->checkJobOptions($serviceId, $options);
-        $handle = $this->gmclient->doBackground(Command\ServiceRunnerCommand::NAME, serialize(array('service' => $serviceId, 'options' => $options)));
+        $handle = @$this->gmclient->doBackground(Command\ServiceRunnerCommand::NAME, serialize(array('service' => $serviceId, 'options' => $options)));
         if ($this->gmclient->returnCode() != GEARMAN_SUCCESS) {
             throw new Exception(sprintf('Failed to add job to server\'s %s:%d queue.', $this->getHostname(), $this->getPort()));
         }
