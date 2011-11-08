@@ -52,13 +52,14 @@ use Symfony\Component\Config\Definition\ConfigurationInterface;
  */
 class Configuration implements ConfigurationInterface
 {
+    const ROOT = 'adticket_elvis_job';
     /**
      * {@inheritDoc}
      */
     public function getConfigTreeBuilder()
     {
         $treeBuilder = new TreeBuilder();
-        $root = $treeBuilder->root('adticket_elvis_job');
+        $root = $treeBuilder->root(self::ROOT);
         $root
             ->children()
             ->scalarNode('hostname')->defaultValue('127.0.0.1')->end()

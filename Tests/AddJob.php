@@ -43,18 +43,41 @@
 /**
  * @author Markus Tacker <m@coderbyheart.de>
  * @package AdTicket:Sf2BundleOS:Elvis:JobBundle
- * @category Job
+ * @category Tests
  */
 
-namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Job;
+namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Tests;
 
+use Adticket\Sf2BundleOS\Elvis\JobBundle\JobInterface;
 use Adticket\Sf2BundleOS\Elvis\JobBundle\Annotation\JobOption;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Interface for jobs
+ * Simple example job
+ * 
+ * @author Markus Tacker <m@coderbyheart.de>
+ * @package AdTicket:Sf2BundleOS:Elvis:JobBundle
+ * @category Tests
  */
-interface JobInterface
+class AddJob implements JobInterface
 {
-    function execute(ContainerInterface $container, \GearmanJob $job);
+    /**
+     * @var int
+     * @JobOption
+     */
+    public $a;
+
+    /**
+     * @var int
+     * @JobOption
+     */
+    public $b;
+
+    public function execute(ContainerInterface $container, \GearmanJob $job)
+    {
+        $job->sendStatus(1, 1);
+        $job->sendComplete($this->a + $this->b);
+        // This is set only for testing
+        $_SERVER['ADDJOB_RESULT'] = $this->a + $this->b;
+    }
 }

@@ -50,6 +50,7 @@ namespace Adticket\Sf2BundleOS\Elvis\JobBundle;
 use Adticket\Sf2BundleOS\Elvis\JobBundle\Annotation;
 use Adticket\Sf2BundleOS\Elvis\JobBundle\Exception;
 use Adticket\Sf2BundleOS\Elvis\JobBundle\Command;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\DependencyInjection\Configuration;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\ContainerAware;
 
@@ -58,28 +59,42 @@ use Symfony\Component\DependencyInjection\ContainerAware;
  */
 class Client extends ContainerAware
 {
+    /**
+     * @var \GearmanClient
+     */
+    private $gmclient;
+    
     public function __construct(ContainerInterface $container = null)
     {
         $this->setContainer($container);
+        $this->gmclient = new \GearmanClient();
+        $this->gmclient->addServer($this->getHostname(), $this->getPort());
     }
 
+    /**
+     * Adds a new job to the queue. Returns the job id.
+     * 
+     * @param string $serviceId service id of the job to run
+     * @param array|null $options for the job
+     */
     public function addJob($serviceId, array $options = null)
     {
         $this->container->get('adticket_elvis_job.optionschecker')->checkJobOptions($serviceId, $options);
-        $gclient = new \GearmanClient();
-        $gclient->addServer($this->getHostname(), $this->getPort());
-        $gclient->doBackground(Command\ServiceRunnerCommand::NAME, serialize(array('service' => $serviceId, 'options' => $options)));
+        $handle = $this->gmclient->doBackground(Command\ServiceRunnerCommand::NAME, serialize(array('service' => $serviceId, 'options' => $options)));
+        if ($this->gmclient->returnCode() != GEARMAN_SUCCESS) {
+            throw new Exception(sprintf('Failed to add job to server\'s %s:%d queue.', $this->getHostname(), $this->getPort()));
+        }
     }
-
+    
     public function getHostname()
     {
-        $config = $this->getContainer()->getParameter('adticket_elvis_job.server');
+        $config = $this->container->getParameter(Configuration::ROOT);
         return $config['hostname'];
     }
 
     public function getPort()
     {
-        $config = $this->getContainer()->getParameter('adticket_elvis_job.server');
+        $config = $this->container->getParameter(Configuration::ROOT);
         return $config['port'];
     }
 }

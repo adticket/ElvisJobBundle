@@ -43,14 +43,19 @@
 namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Tests\Controller;
 
 use Adticket\Sf2BundleOS\Elvis\JobBundle\Command\ServiceRunnerCommand;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\DependencyInjection\Configuration;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\Console;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * @todo FIXME Actually, run this test. See http://kriswallsmith.net/post/1338263070/how-to-test-a-symfony2-bundle
  */
 class ServiceTest extends WebTestCase
 {
+    /**
+     * @var \Symfony\Component\DependencyInjection\ContainerInterface
+     */
     private $container;
 
     /**
@@ -58,46 +63,68 @@ class ServiceTest extends WebTestCase
      */
     private $addResult;
 
+    /**
+     * @var int
+     */
+    private $gearmanpid;
+    
+    /**
+     * @var string
+     */
+    private $pidfile;
+
     protected function setUp()
     {
         static::$kernel = static::createKernel();
         static::$kernel->boot();
-        $this->container = static::$kernel->getContainer();
+        $this->container = self::$kernel->getContainer();
+
+        // Starte gearman
+        $settings = $this->container->getParameter(Configuration::ROOT);
+        $this->pidfile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'jobbundletestgearman.pid';
+        $logfile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'jobbundletestgearman.log';
+        if (is_file($this->pidfile)) {
+            // Check if already running and kill old gearman
+            $oldpid = (int)file_get_contents($this->pidfile);
+            if (posix_kill($oldpid, SIGUSR1)) {
+                if (!posix_kill($oldpid, SIGTERM)) {
+                    $this->markTestSkipped(sprintf('Failed get kill old gearmand from PID file %s', $this->pidfile) . PHP_EOL);
+                }
+            } else {
+                // Remove stale PID file
+                unlink($this->pidfile);
+            }
+        }
+
+        // Start new gearmand
+        exec(sprintf('`which bash` -c \'`which gearmand` -d -L %s -p %d -P %s -vvvvvvv -l %s \' > /dev/null &', $settings['hostname'], $settings['port'], $this->pidfile, $logfile), $output, $return);
+        if ($return !== 0) {
+            $this->markTestSkipped('Failed to start gearmand: ' . PHP_EOL . join(PHP_EOL, $output));
+        } else {
+            $i = 0;
+            while(!is_file($this->pidfile) && $i++ < 10) {
+                sleep(1);
+            }
+            if (!is_file($this->pidfile)) {
+                $this->markTestSkipped('Failed get gearmand PID' . PHP_EOL);
+            }
+            $this->gearmanpid = (int)file_get_contents($this->pidfile);
+        }
     }
 
     public function testAdd()
     {
-        $settings = $this->container->getParameter('adticket_elvis_job.server');
-        $settings['port'] = 13666;
-        $settings['hostname'] = 'localhost';
-        $this->container->setParameter('adticket_elvis_job.server', $settings);
-
         $client = $this->getClient();
-        $client->setPort($testport);
         $client->addJob('adticket_elvis_job.job.add', array('a' => 1, 'b' => 2));
 
-        $pid = pcntl_fork();
-        if ($pid) {
-            sleep(1);
-            echo "Beende Worker" . PHP_EOL;
-            posix_kill($pid, 9);
-
-            // Hole Ergebnis
-            $gworker = new \GearmanWorker();
-            $gworker->addServer($settings['hostname'], $settings['port']);
-            $gworker->addFunction(ServiceRunnerCommand::NAME, array($this, 'addResult'));
-            $gworker->work();
-            print_r($this->addResult->workload());
-
-        } else {
-            $worker = new ServiceRunnerCommand();
-            $worker->setPort($testport);
-            $worker->setContainer($this->container);
-            $worker->run(new Console\Input\ArgvInput(array()), new Console\Output\ConsoleOutput());
-        }
+        $worker = new ServiceRunnerCommand();
+        $worker->setContainer($this->container);
+        $worker->setOneWork(true);
+        $worker->run(new Console\Input\ArgvInput(array()), new Console\Output\ConsoleOutput());
+        $this->assertEquals($_SERVER['ADDJOB_RESULT'], 3);
     }
 
-    public function addResult(\GearmanJob $job)
+    private function addResult(\GearmanJob $job)
     {
         $this->addResult = $job;
     }
@@ -105,7 +132,7 @@ class ServiceTest extends WebTestCase
     /**
      * @return \Adticket\Sf2BundleOS\Elvis\JobBundle\Client
      */
-    public function getClient()
+    private function getClient()
     {
         return $this->container->get('adticket_elvis_job.client');
     }
@@ -115,6 +142,11 @@ class ServiceTest extends WebTestCase
      */
     protected function tearDown()
     {
+        // Kill gearmand
+        if ($this->gearmanpid !== null) {
+            posix_kill($this->gearmanpid, SIGTERM);
+        }
+
         if (null !== static::$kernel) {
             static::$kernel->shutdown();
         }

@@ -48,6 +48,7 @@
 namespace Adticket\Sf2BundleOS\Elvis\JobBundle;
 
 use Adticket\Sf2BundleOS\Elvis\JobBundle\Exception;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\ContainerAware;
 
 /**
@@ -55,6 +56,11 @@ use Symfony\Component\DependencyInjection\ContainerAware;
  */
 class JobOptionsChecker extends ContainerAware
 {
+    public function __construct(ContainerInterface $container = null)
+    {
+        $this->setContainer($container);
+    }
+    
     /**
      * Überprüft die Optionen für einen Job
      *

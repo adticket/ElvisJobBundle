@@ -6,7 +6,7 @@
 
     <parameters>
         <parameter key="adticket_elvis_job.client.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Client</parameter>
-        <parameter key="adticket_elvis_job.job.add.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Job\AddJob</parameter>
+        <parameter key="adticket_elvis_job.job.add.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Tests\AddJob</parameter>
         <parameter key="adticket_elvis_job.job.addresult.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Job\AddJobResult</parameter>
         <parameter key="adticket_elvis_job.optionschecker.class">Adticket\Sf2BundleOS\Elvis\JobBundle\JobOptionsChecker</parameter>
     </parameters>

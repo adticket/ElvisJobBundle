@@ -61,7 +61,13 @@ class AdticketElvisJobExtension extends Extension
     {
         $configuration = new Configuration();
         $config = $this->processConfiguration($configuration, $configs);
-        $container->setParameter('adticket_elvis_job.server', $config);
+        $container->setParameter(Configuration::ROOT, $config);
+        if (isset($_SERVER['GEARMAND_HOST'])) {
+            $settings = array();
+            $settings['port'] = $_SERVER['GEARMAND_PORT'];
+            $settings['hostname'] = $_SERVER['GEARMAND_HOST'];
+            $container->setParameter(Configuration::ROOT, $settings);
+        }
 
         $loader = new Loader\XmlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
         $loader->load('services.xml');

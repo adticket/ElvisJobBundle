@@ -49,6 +49,7 @@
 namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Command;
 
 use Adticket\Sf2BundleOS\Elvis\JobBundle\Exception;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\DependencyInjection\Configuration;
 use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -66,11 +67,30 @@ class ServiceRunnerCommand extends ContainerAwareCommand
      */
     private $output;
 
+    /**
+     * @var boolean
+     */
+    private $oneWork = false;
+
+    /**
+     * @var bool
+     */
+    private $verbose = false;
+
+    /**
+     * @var boolean
+     */
+    private $running = true;
+    
     protected function configure()
     {
         $this
-                ->setName('jobbundle:servicerunner')
-                ->setDescription('Runs the service runner worker');
+            ->setName('jobbundle:servicerunner')
+            ->setDescription('Runs the service runner worker')
+            ->setDefinition(array(
+                new InputArgument('verbose', InputArgument::OPTIONAL, 'Turn verbose messages on', $this->verbose)
+            ));
+
     }
 
     /**
@@ -78,26 +98,27 @@ class ServiceRunnerCommand extends ContainerAwareCommand
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        $this->verbose = $input->getArgument('verbose');
         $this->output = $output;
         $gworker = new \GearmanWorker();
         $gworker->addOptions(GEARMAN_WORKER_NON_BLOCKING);
-        $server = $this->getContainer()->getParameter('adticket_elvis_job.server');
         $gworker->addServer($this->getHostname(), $this->getPort());
         $gworker->addFunction(self::NAME, array($this, 'runService'));
 
         while (@$gworker->work() ||
-               $gworker->returnCode() == GEARMAN_IO_WAIT ||
-               $gworker->returnCode() == GEARMAN_NO_JOBS)
+                $gworker->returnCode() == GEARMAN_IO_WAIT ||
+                $gworker->returnCode() == GEARMAN_NO_JOBS)
         {
-            if ($gworker->returnCode() == GEARMAN_SUCCESS)
+            if ($gworker->returnCode() == GEARMAN_SUCCESS) {
                 continue;
-
-            $output->writeln("Waiting for next job...");
+            }
+            if (!$this->running) {
+                if ($this->verbose) $output->writeln("Terminating ...");
+                return;
+            }
             if (!@$gworker->wait()) {
                 if ($gworker->returnCode() == GEARMAN_NO_ACTIVE_FDS) {
-                    $output->writeln("Disconnected from server ...");
-                    # We are not connected to any servers, so wait a bit before
-                    # trying to reconnect.
+                    if ($input->getArgument('verbose')) $output->writeln("Disconnected from server ...");
                     sleep(5);
                     continue;
                 }
@@ -108,30 +129,56 @@ class ServiceRunnerCommand extends ContainerAwareCommand
         $output->writeln("Worker Error: " . $gworker->error());
     }
 
+    /**
+     * Runs a service requested by the job, Callback for {@link \GearmanClient GearmanClient}.
+     *
+     * @throws \Adticket\Sf2BundleOS\Elvis\JobBundle\Exception
+     * @param \GearmanJob $job
+     * @return void
+     */
     public function runService(\GearmanJob $job)
     {
-        $this->output->writeln("Running " . $job->functionName());
+        if ($this->verbose) $this->output->writeln("Running " . $job->functionName());
         $wl = unserialize($job->workload());
-        foreach(array('service', 'options') as $k) {
+        foreach (array('service', 'options') as $k) {
             if (!array_key_exists($k, $wl)) throw new Exception(sprintf('Missing property %s in workload', $k));
         }
         $this->getContainer()->get('adticket_elvis_job.optionschecker')->checkJobOptions($wl['service'], $wl['options']);
-        $service = $this->getContainer()->get($wl['service']);
-        foreach($wl['options'] as $k => $v) {
+        $service = clone $this->getContainer()->get($wl['service']);
+        foreach ($wl['options'] as $k => $v) {
             $service->$k = $v;
         }
+        if ($this->verbose) $this->output->write("Executing " . $wl['service'] . ' ... ');
         $service->execute($this->getContainer(), $job);
+        if ($this->verbose) $this->output->writeln("Done.");
+        if ($this->getOneWork()) $this->running = false;
     }
 
     public function getHostname()
     {
-        $config = $this->getContainer()->getParameter('adticket_elvis_job.server');
+        $config = $this->getContainer()->getParameter(Configuration::ROOT);
         return $config['hostname'];
     }
 
     public function getPort()
     {
-        $config = $this->getContainer()->getParameter('adticket_elvis_job.server');
+        $config = $this->getContainer()->getParameter(Configuration::ROOT);
         return $config['port'];
+    }
+
+    /**
+     * Terminate after on completed task
+     *
+     * @param boolean $oneWork
+     * @return void
+     */
+    public function setOneWork($oneWork)
+    {
+        $this->oneWork = $oneWork;
+    }
+
+    public function getOneWork()
+    {
+        return $this->oneWork;
     }
 }

@@ -3,6 +3,8 @@
     <php>
         <!-- The path to your app folder -->
         <server name="KERNEL_DIR" value="../../../../../../app/"/>
+        <server name="GEARMAND_HOST" value="127.0.0.1"/>
+        <server name="GEARMAND_PORT" value="13666"/>
     </php>
     <testsuites>
         <testsuite name="ElvisJobBundle Test Suite">
