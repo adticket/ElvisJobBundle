@@ -43,55 +43,26 @@
 /**
  * @author Markus Tacker <m@coderbyheart.de>
  * @package AdTicket:Sf2BundleOS:Elvis:JobBundle
+ * @category Tests
  */
 
-namespace Adticket\Sf2BundleOS\Elvis\JobBundle;
+namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Tests;
 
-use Adticket\Sf2BundleOS\Elvis\JobBundle\Exception;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\JobInterface;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Annotation\JobOption;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\DependencyInjection\ContainerAware;
 
 /**
- * Checks job options
+ * Job for testing crashed workers
+ * 
+ * @author Markus Tacker <m@coderbyheart.de>
+ * @package AdTicket:Sf2BundleOS:Elvis:JobBundle
+ * @category Tests
  */
-class JobOptionsChecker extends ContainerAware
+class ExitJob implements JobInterface
 {
-    public function __construct(ContainerInterface $container = null)
+    public function execute(ContainerInterface $container, \GearmanJob $job)
     {
-        $this->setContainer($container);
-    }
-    
-    /**
-     * Überprüft die Optionen für einen Job
-     *
-     * @param string Service-ID
-     * @param array die Optionen
-     */
-    public function checkJobOptions($serviceId, Array $options = null)
-    {
-        $job = $this->container->get($serviceId);
-        $jobOptions = $this->getJobOptions($job);
-        if ($options === null && empty($jobOptions)) return;
-        $unmatchedOptions = array_diff($jobOptions, array_keys($options));
-        if (!empty($unmatchedOptions)) throw new Exception(sprintf('Unknown options provided for job "%s": %s', $serviceId, join(', ', $unmatchedOptions)));
-    }
-
-    /**
-     * Liefert die mit @Annotation\JobOption markierten Properties einer Klasse
-     * 
-     * @param object $job
-     * @return string[]
-     */
-    protected function getJobOptions($job)
-    {
-        $annotationReader = $this->container->get('annotation_reader');
-        $refClass = new \ReflectionClass(is_object($job) ? get_class($job) : $job);
-        $jobOptions = array();
-        foreach($refClass->getProperties() as $property) {
-            foreach($annotationReader->getPropertyAnnotations($property) as $propertyAnnotation) {
-                if ($propertyAnnotation instanceof Annotation\JobOption) $jobOptions[] = $property->getName();
-            }
-        }
-        return $jobOptions;
+        exit;
     }
 }

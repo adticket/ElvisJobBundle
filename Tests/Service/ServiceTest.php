@@ -49,7 +49,9 @@ use Symfony\Component\Console;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * @todo FIXME Actually, run this test. See http://kriswallsmith.net/post/1338263070/how-to-test-a-symfony2-bundle
+ * Simple test for the test runner
+ *
+ * Note: The forking must not be used when running in PHPUnit
  */
 class ServiceTest extends WebTestCase
 {
@@ -117,7 +119,7 @@ class ServiceTest extends WebTestCase
         $client = $this->getClient();
         $client->addJob('adticket_elvis_job.job.add', array('a' => 1, 'b' => 2));
 
-        $worker = new ServiceRunnerCommand();
+        $worker = new ServiceRunnerCommand(false);
         $worker->setContainer($this->container);
         $worker->setOneWork(true);
         $worker->run(new Console\Input\ArgvInput(array()), new Console\Output\ConsoleOutput());

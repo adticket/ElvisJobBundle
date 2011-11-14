@@ -7,7 +7,7 @@
     <parameters>
         <parameter key="adticket_elvis_job.client.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Client</parameter>
         <parameter key="adticket_elvis_job.job.add.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Tests\AddJob</parameter>
-        <parameter key="adticket_elvis_job.job.addresult.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Job\AddJobResult</parameter>
+        <parameter key="adticket_elvis_job.job.exit.class">Adticket\Sf2BundleOS\Elvis\JobBundle\Tests\ExitJob</parameter>
         <parameter key="adticket_elvis_job.optionschecker.class">Adticket\Sf2BundleOS\Elvis\JobBundle\JobOptionsChecker</parameter>
     </parameters>
 
@@ -16,7 +16,7 @@
             <argument type="service" id="service_container" />
         </service>
         <service id="adticket_elvis_job.job.add" class="%adticket_elvis_job.job.add.class%" />
-        <service id="adticket_elvis_job.job.addresult" class="%adticket_elvis_job.job.addresult.class%" />
+        <service id="adticket_elvis_job.job.exit" class="%adticket_elvis_job.job.exit.class%" />
         <service id="adticket_elvis_job.optionschecker" class="%adticket_elvis_job.optionschecker.class%">
             <argument type="service" id="service_container" />
         </service>

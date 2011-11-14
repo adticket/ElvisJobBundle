@@ -52,8 +52,10 @@ use Adticket\Sf2BundleOS\Elvis\JobBundle\Exception;
 use Adticket\Sf2BundleOS\Elvis\JobBundle\DependencyInjection\Configuration;
 use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
 use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Input\InputDefinition;
 
 /**
  * Runs the worker
@@ -75,22 +77,35 @@ class ServiceRunnerCommand extends ContainerAwareCommand
     /**
      * @var bool
      */
-    private $verbose = false;
+    private $fork = true;
 
     /**
      * @var boolean
      */
     private $running = true;
+
+    public function __construct($fork = null)
+    {
+        if ($fork !== null) $this->setFork($fork);
+        parent::__construct();
+    }
     
     protected function configure()
     {
         $this
             ->setName('jobbundle:servicerunner')
             ->setDescription('Runs the service runner worker')
-            ->setDefinition(array(
-                new InputArgument('verbose', InputArgument::OPTIONAL, 'Turn verbose messages on', $this->verbose)
-            ));
+            ->setDefinition($this->getInputDefinition());
+    }
 
+    /**
+     * @return \Symfony\Component\Console\Input\InputDefinition
+     */
+    public function getInputDefinition()
+    {
+        return new InputDefinition(array(
+            new InputOption('fork', 'f', InputOption::VALUE_OPTIONAL, 'Fork worker jobs as childs', $this->fork)
+        ));
     }
 
     /**
@@ -98,7 +113,7 @@ class ServiceRunnerCommand extends ContainerAwareCommand
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $this->verbose = $input->getArgument('verbose');
+        $this->fork = (boolean)$input->getOption('fork');
         $this->output = $output;
         $gworker = new \GearmanWorker();
         $gworker->addOptions(GEARMAN_WORKER_NON_BLOCKING);
@@ -113,12 +128,12 @@ class ServiceRunnerCommand extends ContainerAwareCommand
                 continue;
             }
             if (!$this->running) {
-                if ($this->verbose) $output->writeln("Terminating ...");
+                $output->writeln('Terminating ...', OutputInterface::VERBOSITY_VERBOSE);
                 return;
             }
             if (!@$gworker->wait()) {
                 if ($gworker->returnCode() == GEARMAN_NO_ACTIVE_FDS) {
-                    if ($input->getArgument('verbose')) $output->writeln("Disconnected from server ...");
+                    $output->writeln('Disconnected from server ...', OutputInterface::VERBOSITY_VERBOSE);
                     sleep(5);
                     continue;
                 }
@@ -138,7 +153,7 @@ class ServiceRunnerCommand extends ContainerAwareCommand
      */
     public function runService(\GearmanJob $job)
     {
-        if ($this->verbose) $this->output->writeln("Running " . $job->functionName());
+        $this->output->writeln('Running ' . $job->functionName(), OutputInterface::VERBOSITY_VERBOSE);
         $wl = unserialize($job->workload());
         foreach (array('service', 'options') as $k) {
             if (!array_key_exists($k, $wl)) throw new Exception(sprintf('Missing property %s in workload', $k));
@@ -148,10 +163,34 @@ class ServiceRunnerCommand extends ContainerAwareCommand
         foreach ($wl['options'] as $k => $v) {
             $service->$k = $v;
         }
-        if ($this->verbose) $this->output->write("Executing " . $wl['service'] . ' ... ');
-        $service->execute($this->getContainer(), $job);
-        if ($this->verbose) $this->output->writeln("Done.");
-        if ($this->getOneWork()) $this->running = false;
+        $this->output->write('Executing ' . $wl['service'] . ' ... ', OutputInterface::VERBOSITY_VERBOSE);
+
+        if ($this->fork) {
+            echo "FORKINGGGGG!" . PHP_EOL;
+            $pid = pcntl_fork();
+            if ($pid == -1) {
+                throw new Exception('Failed to fork');
+            } else if ($pid) {
+                pcntl_wait($status);
+                if (pcntl_wifexited($status)) {
+                    $this->output->writeln(sprintf('%s is done.', $wl['service']), OutputInterface::VERBOSITY_VERBOSE);
+                } else {
+                    $this->output->writeln(sprintf('Child execution of service %s failed.', $wl['service']), OutputInterface::VERBOSITY_QUIET);
+                }
+                if ($this->getOneWork()) $this->running = false;
+            } else {
+                $service->execute($this->getContainer(), $job);
+            }
+        } else {
+            try {
+                $service->execute($this->getContainer(), $job);
+                $this->output->writeln(sprintf('%s is done.', $wl['service']), OutputInterface::VERBOSITY_VERBOSE);
+            } catch (\Exception $e) {
+                $this->output->writeln(sprintf('Child execution of service %s failed: %d / %s', $wl['service'], $e->getCode(), $e->getMessage()), OutputInterface::VERBOSITY_QUIET);
+            }
+            if ($this->getOneWork()) $this->running = false;
+        }
+
     }
 
     public function getHostname()
@@ -180,5 +219,21 @@ class ServiceRunnerCommand extends ContainerAwareCommand
     public function getOneWork()
     {
         return $this->oneWork;
+    }
+
+    /**
+     * @param boolean $fork
+     */
+    public function setFork($fork)
+    {
+        $this->fork = $fork;
+    }
+
+    /**
+     * @return boolean
+     */
+    public function getFork()
+    {
+        return $this->fork;
     }
 }
