@@ -166,7 +166,6 @@ class ServiceRunnerCommand extends ContainerAwareCommand
         $this->output->write('Executing ' . $wl['service'] . ' ... ', OutputInterface::VERBOSITY_VERBOSE);
 
         if ($this->fork) {
-            echo "FORKINGGGGG!" . PHP_EOL;
             $pid = pcntl_fork();
             if ($pid == -1) {
                 throw new Exception('Failed to fork');
