@@ -49,6 +49,7 @@ namespace Adticket\Sf2BundleOS\Elvis\JobBundle;
 
 use Adticket\Sf2BundleOS\Elvis\JobBundle\Annotation\JobOption;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Job;
 
 /**
  * Interface for jobs
@@ -58,5 +59,5 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  */
 interface JobInterface
 {
-    function execute(ContainerInterface $container, \GearmanJob $job);
+    function execute(ContainerInterface $container, Job $job);
 }

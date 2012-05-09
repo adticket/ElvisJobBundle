@@ -42,20 +42,23 @@
 
 /**
  * @author Markus Tacker <m@coderbyheart.de>
+ * @author Dennis Oehme <oehme@gardenofconcepts.com>
  * @package AdTicket:Sf2BundleOS:Elvis:JobBundle
  * @category Command
  */
 
 namespace Adticket\Sf2BundleOS\Elvis\JobBundle\Command;
 
-use Adticket\Sf2BundleOS\Elvis\JobBundle\Exception;
-use Adticket\Sf2BundleOS\Elvis\JobBundle\DependencyInjection\Configuration;
 use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Input\InputDefinition;
+
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Job;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\Exception;
+use Adticket\Sf2BundleOS\Elvis\JobBundle\DependencyInjection\Configuration;
 
 /**
  * Runs the worker
@@ -65,31 +68,32 @@ class ServiceRunnerCommand extends ContainerAwareCommand
     const NAME = 'ServiceRunner';
 
     /**
-     * @var \Symfony\Component\Console\Output\OutputInterface
-     */
-    private $output;
-
-    /**
-     * @var boolean
-     */
-    private $oneWork = false;
-
-    /**
      * @var bool
      */
     private $fork = true;
+
+    /**
+     * @var int
+     */
+    private $timeout = 30;
+
+    /**
+     * @var int
+     */
+    private $nice = 19;
 
     /**
      * @var boolean
      */
     private $running = true;
 
-    public function __construct($fork = null)
-    {
-        if ($fork !== null) $this->setFork($fork);
-        parent::__construct();
-    }
-    
+    public $childs = array();
+
+    public $jobs = array();
+
+    /**
+     *
+     */
     protected function configure()
     {
         $this
@@ -104,8 +108,20 @@ class ServiceRunnerCommand extends ContainerAwareCommand
     public function getInputDefinition()
     {
         return new InputDefinition(array(
-            new InputOption('fork', 'f', InputOption::VALUE_OPTIONAL, 'Fork worker jobs as childs', $this->fork)
+            new InputOption('fork', 'f', InputOption::VALUE_OPTIONAL, 'Fork worker jobs as childs', $this->fork),
+            new InputOption('timeout', 't', InputOption::VALUE_OPTIONAL, 'Timeout for job execution before job will killed', $this->timeout),
+            new InputOption('nice', null, InputOption::VALUE_OPTIONAL, 'Nice level for child execution', $this->nice)
         ));
+    }
+
+    public function getContainer()
+    {
+        return parent::getContainer();
+    }
+
+    public function getService($name)
+    {
+        return clone $this->getContainer()->get($name);
     }
 
     /**
@@ -113,35 +129,129 @@ class ServiceRunnerCommand extends ContainerAwareCommand
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $this->fork = (boolean)$input->getOption('fork');
-        $this->output = $output;
-        $gworker = new \GearmanWorker();
-        $gworker->addOptions(GEARMAN_WORKER_NON_BLOCKING);
-        $gworker->addServer($this->getHostname(), $this->getPort());
-        $gworker->addFunction(self::NAME, array($this, 'runService'));
+        $fork = $input->getOption('fork');
 
-        while (@$gworker->work() ||
-                $gworker->returnCode() == GEARMAN_IO_WAIT ||
-                $gworker->returnCode() == GEARMAN_NO_JOBS)
-        {
-            if ($gworker->returnCode() == GEARMAN_SUCCESS) {
-                continue;
+        // prevent for lost connections
+        while (true) {
+            try {
+                $output->writeln(sprintf('<info>Start worker process (%s)... waiting for jobs...</info>', getmypid()), OutputInterface::VERBOSITY_VERBOSE);
+                $this->runWorker($input, $output);
+            } catch (\Exception $e) {
+                $output->writeln(sprintf('<error>Working error: %s: %s</error>', get_class($e), $e->getMessage()), OutputInterface::VERBOSITY_VERBOSE);
             }
-            if (!$this->running) {
-                $output->writeln('Terminating ...', OutputInterface::VERBOSITY_VERBOSE);
-                return;
-            }
-            if (!@$gworker->wait()) {
-                if ($gworker->returnCode() == GEARMAN_NO_ACTIVE_FDS) {
-                    $output->writeln('Disconnected from server ...', OutputInterface::VERBOSITY_VERBOSE);
-                    sleep(5);
-                    continue;
-                }
+        }
+    }
+
+    /**
+     * @param \Symfony\Component\Console\Input\InputInterface $input
+     * @param \Symfony\Component\Console\Output\OutputInterface $output
+     * @param boolean $fork
+     */
+    protected function runWorker(InputInterface $input, OutputInterface $output)
+    {
+        $self = $this;
+        $worker = new \GearmanWorker();
+        $worker->addServer($this->getHostname(), $this->getPort());
+        //$worker->addOptions(GEARMAN_WORKER_NON_BLOCKING);
+        $worker->addFunction(self::NAME, function(\GearmanJob $job) use ($self, $output) {
+            $data = unserialize($job->workload());
+
+            $job->sendComplete(1);
+
+            $job = new Job();
+            $job->setService($data['service']);
+            $job->setData($data['options']);
+            $job->setStatus(Job::STATUS_RUNNING);
+
+            return $self->forkProcess($job, $output);
+        });
+
+        while (true) {
+            $worker->work();
+
+            if ($worker->returnCode() != GEARMAN_SUCCESS) {
+                $output->writeln("<error>Worker Error: " . $worker->error() . '</error>');
                 break;
             }
         }
+    }
 
-        $output->writeln("Worker Error: " . $gworker->error());
+    /**
+     * @param \Adticket\Sf2BundleOS\Elvis\JobBundle\Job $job
+     * @param \Symfony\Component\Console\Output\OutputInterface $output
+     */
+    public function forkProcess(Job $job, OutputInterface $output)
+    {
+        declare(ticks = 1);
+
+        $pid = pcntl_fork();
+        $self = $this;
+
+        if ($pid == -1) {
+            throw new Exception('Failed to fork');
+        } else if ($pid) {
+            $output->writeln(sprintf('<info>Main process (%s) waiting...</info>', getmypid()));
+            pcntl_wait($status);
+            /*if (pcntl_wifexited($status)) {
+                $output->writeln(sprintf('<info>%s is done.</info>', $job->getService()), OutputInterface::VERBOSITY_VERBOSE);
+            } else {
+                $output->writeln(sprintf('<error>Child execution of service %s failed.</error>', $job->getService()), OutputInterface::VERBOSITY_QUIET);
+            }*/
+        } else {
+            $this->callChild($job, $output, $self);
+        }
+    }
+
+    /**
+     * @param $job
+     * @param $output
+     * @param $self
+     */
+    public function callChild(Job $job, OutputInterface $output, ServiceRunnerCommand $self)
+    {
+        $pid = posix_getpid();
+
+        $self->jobs[$pid] = $job;
+
+        pcntl_setpriority(19);
+        pcntl_alarm(60);
+
+        // handle timeout process
+        pcntl_signal(SIGALRM, function() use ($pid, $output, $self) {
+            $job = $self->jobs[$pid];
+
+            $output->writeln(sprintf('<error>Child execution of service %s (%s) failed: time out, process killed</error>', $job->getService(), $pid), OutputInterface::VERBOSITY_QUIET);
+
+            if (array_key_exists($pid, $self->jobs)) {
+                $self->jobs[$pid]->setStatus(Job::STATUS_TIMEOUT);
+                $self->jobs[$pid]->setMessage('Timeout, job killed!');
+            }
+
+            posix_kill(getmypid(), SIGKILL);
+        }, true);
+
+        // handles success child exit
+        pcntl_signal(SIGINT, function() use ($pid, $output, $self) {
+            $job = $self->jobs[$pid];
+
+            $output->writeln(sprintf('<info>Child execution of service %s (%s) is is successfully done</info>', $job->getService(), $pid), OutputInterface::VERBOSITY_VERBOSE);
+
+            unset($self->jobs[$pid]);
+
+            posix_kill(getmypid(), SIGKILL);
+        }, true);
+
+        $output->writeln(sprintf('<info>Child execution of service %s (%s) started...</info>', $job->getService(), $pid), OutputInterface::VERBOSITY_VERBOSE);
+
+        $service = $self->getService($job->getService());
+
+        foreach ($job->getData() as $k => $v) {
+            $service->$k = $v;
+        }
+
+        $service->execute($self->getContainer(), $job, $job->getData());
+
+        posix_kill(getmypid(), SIGINT);
     }
 
     /**
@@ -151,30 +261,29 @@ class ServiceRunnerCommand extends ContainerAwareCommand
      * @param \GearmanJob $job
      * @return void
      */
-    public function runService(\GearmanJob $job)
+    /*public function runService2(\GearmanJob $job, $output, $fork)
     {
-        $this->output->writeln('Running ' . $job->functionName(), OutputInterface::VERBOSITY_VERBOSE);
+        $fork = true;
+        $output->writeln('Running ' . $job->functionName(), OutputInterface::VERBOSITY_VERBOSE);
         $wl = unserialize($job->workload());
         foreach (array('service', 'options') as $k) {
             if (!array_key_exists($k, $wl)) throw new Exception(sprintf('Missing property %s in workload', $k));
         }
         $this->getContainer()->get('adticket_elvis_job.optionschecker')->checkJobOptions($wl['service'], $wl['options']);
         $service = clone $this->getContainer()->get($wl['service']);
-        foreach ($wl['options'] as $k => $v) {
-            $service->$k = $v;
-        }
-        $this->output->write('Executing ' . $wl['service'] . ' ... ', OutputInterface::VERBOSITY_VERBOSE);
 
-        if ($this->fork) {
+        $output->write('Executing ' . $wl['service'] . ' ... ', OutputInterface::VERBOSITY_VERBOSE);
+
+        if ($fork) {
             $pid = pcntl_fork();
             if ($pid == -1) {
                 throw new Exception('Failed to fork');
             } else if ($pid) {
                 pcntl_wait($status);
                 if (pcntl_wifexited($status)) {
-                    $this->output->writeln(sprintf('%s is done.', $wl['service']), OutputInterface::VERBOSITY_VERBOSE);
+                    $output->writeln(sprintf('%s is done.', $wl['service']), OutputInterface::VERBOSITY_VERBOSE);
                 } else {
-                    $this->output->writeln(sprintf('Child execution of service %s failed.', $wl['service']), OutputInterface::VERBOSITY_QUIET);
+                    $output->writeln(sprintf('Child execution of service %s failed.', $wl['service']), OutputInterface::VERBOSITY_QUIET);
                 }
                 if ($this->getOneWork()) $this->running = false;
             } else {
@@ -183,41 +292,34 @@ class ServiceRunnerCommand extends ContainerAwareCommand
         } else {
             try {
                 $service->execute($this->getContainer(), $job);
-                $this->output->writeln(sprintf('%s is done.', $wl['service']), OutputInterface::VERBOSITY_VERBOSE);
+                $output->writeln(sprintf('%s is done.', $wl['service']), OutputInterface::VERBOSITY_VERBOSE);
             } catch (\Exception $e) {
-                $this->output->writeln(sprintf('Child execution of service %s failed: %d / %s', $wl['service'], $e->getCode(), $e->getMessage()), OutputInterface::VERBOSITY_QUIET);
+                $output->writeln(sprintf('Child execution of service %s failed: %d / %s', $wl['service'], $e->getCode(), $e->getMessage()), OutputInterface::VERBOSITY_QUIET);
             }
             if ($this->getOneWork()) $this->running = false;
         }
 
-    }
+        return true;
+    }*/
 
+    /**
+     * @return string
+     */
     public function getHostname()
     {
         $config = $this->getContainer()->getParameter(Configuration::ROOT);
+
         return $config['hostname'];
     }
 
+    /**
+     * @return int
+     */
     public function getPort()
     {
         $config = $this->getContainer()->getParameter(Configuration::ROOT);
+
         return $config['port'];
-    }
-
-    /**
-     * Terminate after on completed task
-     *
-     * @param boolean $oneWork
-     * @return void
-     */
-    public function setOneWork($oneWork)
-    {
-        $this->oneWork = $oneWork;
-    }
-
-    public function getOneWork()
-    {
-        return $this->oneWork;
     }
 
     /**
