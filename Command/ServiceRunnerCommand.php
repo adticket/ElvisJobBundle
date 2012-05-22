@@ -75,7 +75,7 @@ class ServiceRunnerCommand extends ContainerAwareCommand
     /**
      * @var int
      */
-    private $timeout = 30;
+    private $timeout = 120;
 
     /**
      * @var int
@@ -114,11 +114,18 @@ class ServiceRunnerCommand extends ContainerAwareCommand
         ));
     }
 
+    /**
+     * {@inheritdoc}
+     */
     public function getContainer()
     {
         return parent::getContainer();
     }
 
+    /**
+     * @param string $name
+     * @return object
+     */
     public function getService($name)
     {
         return clone $this->getContainer()->get($name);
@@ -129,15 +136,26 @@ class ServiceRunnerCommand extends ContainerAwareCommand
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $fork = $input->getOption('fork');
+        try {
+            $worker = new \GearmanWorker();
+            $worker->addServer($this->getHostname(), $this->getPort());
+            $worker->addFunction(self::NAME, function(\GearmanJob $job) {
+
+            });
+            $worker->work();
+        } catch (\Exception $e) {
+            $output->writeln(sprintf('<error>Connection to gearmand failed: %s: %s</error>', get_class($e), $e->getMessage()));
+
+            return -1;
+        }
 
         // prevent for lost connections
         while (true) {
             try {
-                $output->writeln(sprintf('<info>Start worker process (%s)... waiting for jobs...</info>', getmypid()), OutputInterface::VERBOSITY_VERBOSE);
+                $output->writeln(sprintf('<info>Start worker process (%s)...</info>', getmypid()), OutputInterface::VERBOSITY_VERBOSE);
                 $this->runWorker($input, $output);
             } catch (\Exception $e) {
-                $output->writeln(sprintf('<error>Working error: %s: %s</error>', get_class($e), $e->getMessage()), OutputInterface::VERBOSITY_VERBOSE);
+                $output->writeln(sprintf('<error>Working error: %s: %s</error>', get_class($e), $e->getMessage()));
             }
         }
     }
@@ -190,7 +208,7 @@ class ServiceRunnerCommand extends ContainerAwareCommand
         if ($pid == -1) {
             throw new Exception('Failed to fork');
         } else if ($pid) {
-            $output->writeln(sprintf('<info>Main process (%s) waiting...</info>', getmypid()));
+            $output->writeln(sprintf('<info>Main process (%s) waiting...</info>', getmypid()), OutputInterface::VERBOSITY_VERBOSE);
             pcntl_wait($status);
             /*if (pcntl_wifexited($status)) {
                 $output->writeln(sprintf('<info>%s is done.</info>', $job->getService()), OutputInterface::VERBOSITY_VERBOSE);
@@ -213,14 +231,14 @@ class ServiceRunnerCommand extends ContainerAwareCommand
 
         $self->jobs[$pid] = $job;
 
-        pcntl_setpriority(19);
-        pcntl_alarm(60);
+        pcntl_setpriority($self->getNiceLevel());
+        pcntl_alarm($self->getTimeout());
 
         // handle timeout process
         pcntl_signal(SIGALRM, function() use ($pid, $output, $self) {
             $job = $self->jobs[$pid];
 
-            $output->writeln(sprintf('<error>Child execution of service %s (%s) failed: time out, process killed</error>', $job->getService(), $pid), OutputInterface::VERBOSITY_QUIET);
+            $output->writeln(sprintf('<error>Child execution of service %s (%s) failed: time out, process killed</error>', $job->getService(), $pid));
 
             if (array_key_exists($pid, $self->jobs)) {
                 $self->jobs[$pid]->setStatus(Job::STATUS_TIMEOUT);
@@ -336,5 +354,21 @@ class ServiceRunnerCommand extends ContainerAwareCommand
     public function getFork()
     {
         return $this->fork;
+    }
+
+    /**
+     * @return int
+     */
+    public function getTimeout()
+    {
+        return $this->timeout;
+    }
+
+    /**
+     * @return int
+     */
+    public function getNiceLevel()
+    {
+        return $this->nice;
     }
 }
